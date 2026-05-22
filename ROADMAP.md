@@ -53,7 +53,8 @@ OPDI Parquet (40 mies., 5M+ lotów B737 EU)
 - [x] Rozszerzona lista MRO (11 STRICT + 14 MEDIUM hubów)
 - [x] Smart picker (preferuje HIGH > MEDIUM > LOW per samolot)
 - [x] Output do CSV (dashboard, lotams_clients, top_priority_now) + Tee log
-- [ ] Feature engineering pod ML (features.py - gotowe, do uruchomienia)
+- [x] Feature engineering pod ML (features.py - 48 kolumn, 16 nowych features)
+- [x] Geograficzny filtr Europy (32 prefiksy ICAO, bez Izraela/Rosji/Bliskiego Wsch., z Afryką Płn. i Turcją)
 
 ### Do zrobienia
 

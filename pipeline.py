@@ -21,8 +21,58 @@ class _Tee:
 # Wszystkie warianty 737
 B737_TYPES = ['B736', 'B737', 'B738', 'B739', 'B37M', 'B38M', 'B39M', 'B3XM']
 
-# Europejskie ICAO prefiksy
-EU_PREFIXES = ('E', 'L', 'B')
+# EU, EEA, Afryka północna, skanydnafia cała
+EUROPE_AIRPORT_PREFIXES = {
+    # Europa Północna + Skandynawia + Bałtyki - prefiks 'E'
+    'EB',  # Belgia
+    'ED',  # Niemcy
+    'EE',  # Estonia
+    'EF',  # Finlandia
+    'EG',  # Wielka Brytania
+    'EH',  # Holandia
+    'EI',  # Irlandia
+    'EK',  # Dania
+    'EL',  # Luksemburg
+    'EN',  # Norwegia
+    'EP',  # Polska
+    'ES',  # Szwecja
+    'EV',  # Łotwa
+    'EY',  # Litwa
+    # Europa Południowa + Środkowa + Bałkany - prefiks 'L' (BEZ LL = Izrael)
+    'LA',  # Albania
+    'LB',  # Bułgaria
+    'LC',  # Cypr (EU)
+    'LD',  # Chorwacja
+    'LE',  # Hiszpania
+    'LF',  # Francja
+    'LG',  # Grecja
+    'LH',  # Węgry
+    'LI',  # Włochy
+    'LJ',  # Słowenia
+    'LK',  # Czechy
+    'LM',  # Malta
+    'LO',  # Austria
+    'LP',  # Portugalia
+    'LQ',  # Bośnia i Hercegowina
+    'LR',  # Rumunia
+    'LS',  # Szwajcaria
+    'LT',  # Turcja
+    'LU',  # Mołdawia
+    'LW',  # Macedonia Płn.
+    'LY',  # Serbia + Czarnogóra
+    'LZ',  # Słowacja
+    # Wyspy + Bałkany - prefiks 'B'
+    'BI',  # Islandia
+    'BK',  # Kosowo
+    # CIS bez sankcji - prefiks 'U'
+    'UK',  # Ukraina
+    # Afryka Północna
+    'DA',  # Algieria
+    'DT',  # Tunezja
+    'GM',  # Maroko
+    'HE',  # Egipt
+    'HL',  # Libia
+}
 
 # Lotniska MRO ważne dla LOTAMS i konkurencji
 MRO_HUBS = {
@@ -67,15 +117,22 @@ STRICT_MRO_HUBS = {'EPWA', 'LBSF', 'LKMT', 'LROP', 'LZIB', 'LIRA', 'LPPT',
 
 
 def load_b737_eu(data_dir="data"):
-    """Wczytaj wszystkie parquety, filtruj do B737 w Europie."""
+    """Wczytaj wszystkie parquety, filtruj do B737 w geograficznej Europie.
+    
+    Filtr OR: lot ma przynajmniej jeden koniec w EUROPE_AIRPORT_PREFIXES.
+    Dzięki temu nie psujemy detekcji gapów - mamy też loty typu Cairo->Frankfurt,
+    które tworzą realne gapy dla samolotów operatorów EU-NA.
+    """
     files = sorted(glob.glob(f"{data_dir}/flight_list_*.parquet"))
     print(f"Wczytuję {len(files)} plików...")
     
     dfs = []
     for f in files:
         df = pd.read_parquet(f, filters=[('typecode', 'in', B737_TYPES)])
-        eu_mask = (df['adep'].str.startswith(EU_PREFIXES, na=False) |
-                   df['ades'].str.startswith(EU_PREFIXES, na=False))
+        # Geograficzny filtr EU - 2-literowe prefiksy ICAO
+        adep_eu = df['adep'].str[:2].isin(EUROPE_AIRPORT_PREFIXES)
+        ades_eu = df['ades'].str[:2].isin(EUROPE_AIRPORT_PREFIXES)
+        eu_mask = adep_eu | ades_eu
         df = df[eu_mask].copy()
         dfs.append(df)
         print(f"  {f}: {len(df):,} B737 EU flights")
@@ -139,9 +196,12 @@ def build_dashboard(df):
     SIX_MONTHS_AGO = NOW - pd.DateOffset(months=6)
     
     # Wszystkie kandydaci na C-check (bez ostrego filtra MRO+stayed_put)
+    # Wymóg: gap MUSI się zdarzyć w geograficznej Europie (ades w EU set)
+    # - LOTAMS konkuruje o EU rynek MRO, gapy w Tel Awiwie itp. nas nie interesują
     candidates = df[
         (df['check_type'] == 'C-check') &
-        (df['gap_days'] > 0)
+        (df['gap_days'] > 0) &
+        (df['ades'].str[:2].isin(EUROPE_AIRPORT_PREFIXES))
     ].copy()
     
     # Klasyfikacja confidence - to będą pseudo-labele dla ML
@@ -242,9 +302,14 @@ if __name__ == "__main__":
     df['check_type'] = df.apply(classify_check, axis=1)
     print(df['check_type'].value_counts())
     
-    print("\n=== Rozkład confidence dla WSZYSTKICH gapów C-check ===")
+    print("\n=== Rozkład confidence dla WSZYSTKICH gapów C-check (w geograficznej EU) ===")
     # Liczę confidence raz globalnie żeby pokazać proporcje przed groupby per aircraft
-    all_c = df[(df['check_type'] == 'C-check') & (df['gap_days'] > 0)].copy()
+    # Filtr na ades w EU - bo tylko gapy w Europie nas interesują
+    all_c = df[
+        (df['check_type'] == 'C-check') &
+        (df['gap_days'] > 0) &
+        (df['ades'].str[:2].isin(EUROPE_AIRPORT_PREFIXES))
+    ].copy()
     all_c['at_strict_mro'] = all_c['ades'].isin(STRICT_MRO_HUBS)
     all_c['at_any_mro'] = all_c['ades'].isin(MRO_HUBS.keys())
     def _conf(r):

@@ -5,7 +5,7 @@ import sys
 
 from pipeline import (
     load_b737_eu, detect_gaps, classify_check,
-    MRO_HUBS, STRICT_MRO_HUBS, OUTPUT_DIR,
+    MRO_HUBS, STRICT_MRO_HUBS, EUROPE_AIRPORT_PREFIXES, OUTPUT_DIR,
     _Tee,
 )
 
@@ -33,24 +33,29 @@ REGISTRATION_TO_COUNTRY = {
 }
 
 # Pierwsze 2 znaki kodu ICAO lotniska → kraj
+# Pokrywa cały EUROPE_AIRPORT_PREFIXES + kilka spoza zakresu (gdyby się przemknęły)
 ICAO_PREFIX_TO_COUNTRY = {
     # Europa Środkowa
     'EP': 'PL', 'ED': 'DE', 'LK': 'CZ', 'LZ': 'SK', 'LO': 'AT', 'LH': 'HU',
     # Europa Zachodnia
     'EG': 'UK', 'EI': 'IE', 'EH': 'NL', 'EB': 'BE', 'EL': 'LU',
     'LF': 'FR', 'LS': 'CH',
-    # Europa Północna
+    # Europa Północna / Skandynawia / Bałtyki
     'EK': 'DK', 'EN': 'NO', 'ES': 'SE', 'EF': 'FI', 'EE': 'EE',
     'EV': 'LV', 'EY': 'LT', 'BI': 'IS',
     # Europa Południowa
     'LE': 'ES', 'LP': 'PT', 'LI': 'IT', 'LG': 'GR', 'LM': 'MT',
-    'LB': 'BG', 'LR': 'RO', 'LY': 'RS', 'LJ': 'SI', 'LD': 'HR',
-    # Bliski Wschód / Afryka
-    'LT': 'TR', 'LL': 'IL', 'LC': 'CY',
-    'OE': 'SA', 'OM': 'AE', 'OT': 'QA', 'OO': 'OM',
-    'HE': 'EG', 'HA': 'ET', 'DA': 'DZ', 'DT': 'TN', 'GM': 'MA',
-    # Inne (CIS)
-    'UU': 'RU', 'UK': 'UA', 'UA': 'KZ',
+    'LB': 'BG', 'LR': 'RO', 'LJ': 'SI', 'LD': 'HR', 'LC': 'CY',
+    # Bałkany
+    'LA': 'AL', 'LQ': 'BA', 'LW': 'MK', 'LY': 'RS', 'BK': 'XK',
+    'LU': 'MD',
+    # Turcja + Ukraina
+    'LT': 'TR', 'UK': 'UA',
+    # Afryka Północna (w zakresie briefu)
+    'DA': 'DZ', 'DT': 'TN', 'GM': 'MA', 'HE': 'EG', 'HL': 'LY',
+    # Poza zakresem briefu, ale na wszelki wypadek (do flagowania "out of EU")
+    'LL': 'IL', 'OE': 'SA', 'OM': 'AE', 'OT': 'QA', 'OO': 'OM',
+    'HA': 'ET', 'UU': 'RU', 'UA': 'KZ',
 }
 
 
@@ -163,8 +168,9 @@ def add_post_gap_features(candidates, aircraft_dict, window_days=30):
     """Zachowanie samolotu w `window_days` dni po gapie."""
     print(f"  Liczę post-gap features (okno {window_days}d)...")
     n = len(candidates)
-    same_op = np.full(n, np.nan, dtype=object)
-    same_country = np.full(n, np.nan, dtype=object)
+    # Float NaN zamiast object - LightGBM przyjmuje float (NaN OK), nie przyjmuje object
+    same_op = np.full(n, np.nan, dtype=np.float64)
+    same_country = np.full(n, np.nan, dtype=np.float64)
     
     candidates_reset = candidates.reset_index(drop=True)
     
@@ -183,16 +189,16 @@ def add_post_gap_features(candidates, aircraft_dict, window_days=30):
             continue
         post = ac_df.loc[mask].sort_values('first_seen')
         first_post = post.iloc[0]
-        # same_operator_after
+        # same_operator_after - 1.0 jeśli ten sam, 0.0 jeśli inny, NaN jeśli brak danych
         pre_op = row.get('icao_operator')
         post_op = first_post.get('icao_operator')
         if pd.notna(post_op) and pd.notna(pre_op):
-            same_op[i] = bool(post_op == pre_op)
+            same_op[i] = 1.0 if post_op == pre_op else 0.0
         # same_country_after (porównanie do kraju rejestracji samolotu)
         reg_country = registration_country(row.get('registration'))
         post_adep_country = airport_country(first_post.get('adep'))
         if reg_country and post_adep_country:
-            same_country[i] = bool(post_adep_country == reg_country)
+            same_country[i] = 1.0 if post_adep_country == reg_country else 0.0
     
     out = candidates_reset.copy()
     out['same_operator_after'] = same_op
@@ -249,10 +255,15 @@ def add_historical_features(candidates):
 # === Top-level ===
 
 def get_c_check_candidates(df):
-    """Wyciągnij kandydatów na C-check + dorzuć pseudo-label confidence z reguł."""
+    """Wyciągnij kandydatów na C-check + dorzuć pseudo-label confidence z reguł.
+    
+    Wymóg geograficzny: gap musi się zdarzyć w EUROPE_AIRPORT_PREFIXES
+    (Europa Zach./Środk. + Skandynawia + Bałkany + Turcja + Afryka Płn. + Ukraina).
+    """
     candidates = df[
         (df['check_type'] == 'C-check') &
-        (df['gap_days'] > 0)
+        (df['gap_days'] > 0) &
+        (df['ades'].str[:2].isin(EUROPE_AIRPORT_PREFIXES))
     ].copy()
     
     candidates['at_strict_mro'] = candidates['ades'].isin(STRICT_MRO_HUBS)
