@@ -36,7 +36,7 @@ def render() -> None:
     with col2:
         band_filter = st.multiselect("Priorytet", bands, default=bands)
     with col3:
-        min_confidence = st.slider("Min. confidence", 0.0, 1.0, 0.0, 0.05)
+        min_confidence = st.slider("Min. confidence", 0.0, 1.0, 0.3, 0.05)
 
     filtered = predictions[
         predictions["operator"].isin(operator_filter)
@@ -47,6 +47,14 @@ def render() -> None:
     c_only = st.checkbox("Tylko historia C-check", value=False)
     if c_only:
         filtered = filtered[filtered["last_check_type"] == "C-check"]
+
+    low_conf = len(filtered[filtered["confidence"] < 0.5])
+    if low_conf > 0:
+        st.warning(
+            f"⚠️ {low_conf} z {len(filtered)} samolotów ma confidence < 0.5 — "
+            "prognoza opiera się na krótkich przerwach (A/B-check), nie na historii C-check. "
+            "Podnieś próg Min. confidence lub zaznacz **Tylko historia C-check** dla pewniejszych wyników."
+        )
 
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Samoloty", filtered["icao24"].nunique())

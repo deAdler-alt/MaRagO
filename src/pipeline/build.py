@@ -47,8 +47,9 @@ def run_pipeline(config: dict | None = None, rebuild_flights: bool = False) -> d
     gaps_path = Path(config["paths"]["gaps"])
     gaps.to_parquet(gaps_path, index=False)
 
-    predictions = predict_ccheck(flights, gaps, config=config)
-    predictions = assign_priority(predictions, config=config)
+    data_end = flights["dep_time_utc"].max().tz_localize(None).to_pydatetime()
+    predictions = predict_ccheck(flights, gaps, config=config, reference_date=data_end)
+    predictions = assign_priority(predictions, config=config, reference_date=data_end)
     predictions_path = Path(config["paths"]["predictions"])
     predictions.to_parquet(predictions_path, index=False)
 

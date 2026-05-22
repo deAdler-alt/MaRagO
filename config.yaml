@@ -3,6 +3,30 @@ data_mode: opdi  # opdi | demo
 opdi:
   base_url: "https://www.eurocontrol.int/performance/data/download/OPDI/v002/flight_list/flight_list_{month}.parquet"
   months:
+    - "202201"
+    - "202202"
+    - "202203"
+    - "202204"
+    - "202205"
+    - "202206"
+    - "202207"
+    - "202208"
+    - "202209"
+    - "202210"
+    - "202211"
+    - "202212"
+    - "202301"
+    - "202302"
+    - "202303"
+    - "202304"
+    - "202305"
+    - "202306"
+    - "202307"
+    - "202308"
+    - "202309"
+    - "202310"
+    - "202311"
+    - "202312"
     - "202401"
     - "202402"
     - "202403"
@@ -32,9 +56,9 @@ column_map:
 checks:
   a_check: [1, 3]
   b_check: [4, 5]
-  c_check: [21, 42]
+  c_check: [21, 55]
   d_check_min: 60
-  min_gap_hours: 12
+  min_gap_hours: 48
 
 mro_hubs:
   - EPWA

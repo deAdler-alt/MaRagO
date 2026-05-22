@@ -17,4 +17,4 @@ else
   python scripts/run_pipeline.py --rebuild-flights
 fi
 
-echo "Done. Run: streamlit run app/main.py"
+echo "Done. Run: PYTHONPATH=\$PWD .venv/bin/streamlit run app/main.py"

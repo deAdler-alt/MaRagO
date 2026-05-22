@@ -63,20 +63,57 @@ def render() -> None:
     alerts = predictions[predictions["priority_band"].isin(["TERAZ", "6 mies.", "12 mies."])].copy()
     alerts = alerts.sort_values("urgency_score", ascending=False)
 
-    st.metric("Aktywne alerty", len(alerts))
+    col_a, col_b = st.columns(2)
+    with col_a:
+        band_filter = st.multiselect(
+            "Pasmo priorytetu",
+            ["TERAZ", "6 mies.", "12 mies."],
+            default=["TERAZ", "6 mies."],
+        )
+    with col_b:
+        min_conf = st.slider("Min. confidence", 0.0, 1.0, 0.3, 0.05)
 
-    for _, row in alerts.iterrows():
-        with st.expander(f"{row.get('priority_label', '')} {row['registration']} — {row['operator']}"):
-            st.write(_sales_note(row))
+    alerts = alerts[alerts["priority_band"].isin(band_filter) & (alerts["confidence"] >= min_conf)]
+
+    low_conf_count = len(predictions[
+        predictions["priority_band"].isin(band_filter) & (predictions["confidence"] < 0.5)
+    ])
+    if low_conf_count > 0:
+        st.warning(
+            f"⚠️ {low_conf_count} alertów ukrytych / poniżej progu confidence < 0.5 — "
+            "prognoza dla tych samolotów jest szacunkowa (brak historii C-check w danych)."
+        )
+
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Aktywne alerty", len(alerts))
+    k2.metric("🔴 TERAZ", len(alerts[alerts["priority_band"] == "TERAZ"]))
+    k3.metric("🟡 6 mies.", len(alerts[alerts["priority_band"] == "6 mies."]))
+
+    st.markdown("---")
+    MAX_EXPANDERS = 50
+    if len(alerts) > MAX_EXPANDERS:
+        st.info(f"Pokazuję top {MAX_EXPANDERS} z {len(alerts)} alertów (posortowane wg priorytetu). Pobierz CSV po pełną listę.")
+    for _, row in alerts.head(MAX_EXPANDERS).iterrows():
+        with st.expander(f"{row.get('priority_label', '')} {row['registration']} — {row.get('operator', '?')} | conf: {row['confidence']:.2f}"):
             st.code(_sales_note(row), language=None)
 
-    digest = _weekly_digest(alerts)
-    st.download_button(
-        "Pobierz tygodniowy digest (Markdown)",
-        digest.encode("utf-8"),
-        "mro_weekly_digest.md",
-        "text/markdown",
-    )
+    col_dl1, col_dl2 = st.columns(2)
+    with col_dl1:
+        digest = _weekly_digest(alerts)
+        st.download_button(
+            "Pobierz tygodniowy digest (Markdown)",
+            digest.encode("utf-8"),
+            "mro_weekly_digest.md",
+            "text/markdown",
+        )
+    with col_dl2:
+        csv = alerts[["registration", "operator", "forecast_quarter", "priority_label", "confidence", "suggested_contact_date"]].to_csv(index=False)
+        st.download_button(
+            "Pobierz pełną listę alertów (CSV)",
+            csv.encode("utf-8"),
+            "mro_alerts.csv",
+            "text/csv",
+        )
 
     st.markdown("---")
     st.caption(
