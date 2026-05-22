@@ -1,1 +1,0 @@
-why u stalking honey?
