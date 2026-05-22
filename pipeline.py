@@ -1,5 +1,22 @@
 import pandas as pd
 import glob
+import sys
+from pathlib import Path
+
+OUTPUT_DIR = Path('output')
+
+
+class _Tee:
+    """Duplikuje stdout do pliku + terminala. Każdy print idzie do obu strumieni."""
+    def __init__(self, *streams):
+        self.streams = streams
+    def write(self, data):
+        for s in self.streams:
+            s.write(data)
+            s.flush()
+    def flush(self):
+        for s in self.streams:
+            s.flush()
 
 # Wszystkie warianty 737
 B737_TYPES = ['B736', 'B737', 'B738', 'B739', 'B37M', 'B38M', 'B39M', 'B3XM']
@@ -9,27 +26,44 @@ EU_PREFIXES = ('E', 'L', 'B')
 
 # Lotniska MRO ważne dla LOTAMS i konkurencji
 MRO_HUBS = {
+    # Dedykowane bazy MRO (też w STRICT poniżej)
     'EPWA': 'Warszawa - LOTAMS',
+    'LBSF': 'Sofia - Lufthansa Technik Sofia',
+    'LKMT': 'Ostrava - Job Air Technic',
+    'LROP': 'Bukareszt - Romaero',
+    'LZIB': 'Bratysława',
+    'LPPT': 'Lizbona - TAP M&E',
+    'LIRA': 'Rzym Ciampino - ATITECH',
+    'EGPK': 'Prestwick - Ryanair Maintenance',
+    'EDLP': 'Paderborn - ATS Maintenance',
+    'EGSH': 'Norwich - KLM UK Engineering',
+    'EGDX': 'St Athan - eCube Solutions / Boeing UK',
+    # Operacyjne huby z MRO (HIGH tylko gdy stayed_put)
     'EDDH': 'Hamburg - Lufthansa Technik',
     'EDDM': 'München - Lufthansa Technik',
     'EIDW': 'Dublin - SR Technics',
-    'LBSF': 'Sofia - Lufthansa Technik Sofia',
     'LTBA': 'Istanbul ATA - Turkish Technic',
     'LTFM': 'Istanbul IST - Turkish Technic',
-    'LROP': 'Bukareszt - Romaero',
-    'LKMT': 'Ostrava - Job Air Technic',
-    'LZIB': 'Bratysława',
-    'LPPT': 'Lizbona - TAP M&E',
+    'LTFJ': 'Istanbul SAW - Turkish Technic SAW',
     'LFLL': 'Lyon - AFI KLM E&M',
     'EHAM': 'Amsterdam - KLM E&M',
     'LSGG': 'Genewa - SR Technics',
-    'LIRA': 'Rzym Ciampino - ATITECH',
     'LGAV': 'Ateny - Olympic Engineering',
+    'LKPR': 'Praga - CSA Technics / Smartwings',
+    'EDDN': 'Norymberga - LH CityLine Maintenance',
+    'EINN': 'Shannon - Lufthansa Technik Shannon',
+    'LHBP': 'Budapeszt - Lufthansa Technik Budapest',
+    'LFSB': 'Bazylea - AMAC Aerospace',
 }
 
 # Strict subset - tu prawie na pewno C-check, nie zwykły parking
-# (lotniska które NIE są dużymi hubami operacyjnymi B737)
-STRICT_MRO_HUBS = {'EPWA', 'LBSF', 'LKMT', 'LROP', 'LZIB', 'LIRA', 'LPPT'}
+# (lotniska które NIE są dużymi hubami operacyjnymi B737 - mała szansa na fałszywy pozytyw)
+# EGPK = Ryanair MRO (mało ruchu liniowego B737 poza Ryanairem)
+# EDLP = ATS, mały regional, dedykowane MRO
+# EGSH = KLM UK Engineering w Norwich, prawie zero ruchu liniowego B737
+# EGDX = St Athan, dedykowane MRO (eCube/Boeing UK), brak ruchu liniowego
+STRICT_MRO_HUBS = {'EPWA', 'LBSF', 'LKMT', 'LROP', 'LZIB', 'LIRA', 'LPPT',
+                   'EGPK', 'EDLP', 'EGSH', 'EGDX'}
 
 
 def load_b737_eu(data_dir="data"):
@@ -118,22 +152,31 @@ def build_dashboard(df):
     )
     
     def confidence(row):
-        # HIGH: strict MRO + samolot wrócił na to lotnisko = pewny C-check
-        if row['at_strict_mro'] and row['stayed_put']:
+        # HIGH: STRICT MRO hub - lotnisko gdzie B737 nie operuje liniowo
+        # (EPWA, LBSF, LKMT, LROP, LZIB, LIRA, LPPT). Sam fakt 14-60 dni postoju
+        # tutaj = niemal pewny C-check. stayed_put nadmiarowy (po check'u często
+        # ferry flight nie wpada w ADS-B i next_adep wygląda jak baza operatora).
+        if row['at_strict_mro']:
             return 'HIGH'
-        # MEDIUM: w MRO hub, ale stayed_put nie potwierdzony (możliwy NaN w next_adep)
-        if row['at_any_mro']:
+        # MEDIUM: hub operacyjny (Sofia, Istanbul, Amsterdam itd.) + samolot
+        # rzeczywiście stał (kolejny lot z tego samego lotniska)
+        if row['at_any_mro'] and row['stayed_put']:
             return 'MEDIUM'
-        # LOW: gap w długości C-check, ale w nieznanym miejscu - może być AOG/storage
+        # LOW: hub operacyjny bez stayed_put LUB gap w nieznanym miejscu
+        # - ambiguous, do weryfikacji przez ML w kroku 8
         return 'LOW'
     candidates['confidence'] = candidates.apply(confidence, axis=1)
     
-    # Do dashboardu tylko HIGH + MEDIUM (LOW pójdzie do ML jako ambiguous)
-    confirmed = candidates[candidates['confidence'].isin(['HIGH', 'MEDIUM'])]
-    
-    # Najnowszy potwierdzony C-check per samolot
-    last_c = (confirmed.sort_values('last_seen')
-              .groupby('icao24').tail(1).copy())
+    # SMART PICKER: per samolot wybieramy ostatni gap PREFERUJĄC wyższe confidence.
+    # Czyli: jak był HIGH (np. EPWA 2024-05) i potem LOW (random 20-dni 2025-08),
+    # to bierzemy ten HIGH - bo to prawdziwy C-check, a LOW to pewnie storage/AOG.
+    # Sortuję ASC po (rank, last_seen), tail(1) bierze najwyższy rank, najnowszą datę.
+    conf_rank = {'HIGH': 3, 'MEDIUM': 2, 'LOW': 1}
+    candidates['_conf_rank'] = candidates['confidence'].map(conf_rank)
+    last_c = (candidates.sort_values(['_conf_rank', 'last_seen'])
+              .groupby('icao24').tail(1)
+              .drop('_conf_rank', axis=1)
+              .copy())
     
     # Czy samolot jeszcze lata? Sprawdź z PEŁNEGO df (nie tylko C-checków)
     last_flight = df.groupby('icao24')['last_seen'].max()
@@ -187,6 +230,11 @@ def build_dashboard(df):
     })
 
 if __name__ == "__main__":
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    log_path = OUTPUT_DIR / 'pipeline_log.txt'
+    log_file = open(log_path, 'w', encoding='utf-8')
+    sys.stdout = _Tee(sys.__stdout__, log_file)
+    
     df = load_b737_eu()
     
     print("\n=== Detekcja gapów ===")
@@ -194,13 +242,46 @@ if __name__ == "__main__":
     df['check_type'] = df.apply(classify_check, axis=1)
     print(df['check_type'].value_counts())
     
+    print("\n=== Rozkład confidence dla WSZYSTKICH gapów C-check ===")
+    # Liczę confidence raz globalnie żeby pokazać proporcje przed groupby per aircraft
+    all_c = df[(df['check_type'] == 'C-check') & (df['gap_days'] > 0)].copy()
+    all_c['at_strict_mro'] = all_c['ades'].isin(STRICT_MRO_HUBS)
+    all_c['at_any_mro'] = all_c['ades'].isin(MRO_HUBS.keys())
+    def _conf(r):
+        if r['at_strict_mro']: return 'HIGH'
+        if r['at_any_mro'] and r['stayed_put']: return 'MEDIUM'
+        return 'LOW'
+    all_c['confidence'] = all_c.apply(_conf, axis=1)
+    print(f"Wszystkie gapy 14-60 dni: {len(all_c)}")
+    print(all_c['confidence'].value_counts())
+    print(f"  HIGH %: {(all_c['confidence']=='HIGH').mean()*100:.1f}")
+    print(f"  MED  %: {(all_c['confidence']=='MEDIUM').mean()*100:.1f}")
+    print(f"  LOW  %: {(all_c['confidence']=='LOW').mean()*100:.1f}")
+    
+    # Diagnostyka stayed_put w STRICT MRO - czy OPDI gubi loty pozycjonujące?
+    # Jeśli stayed_put% wysoki (>70%) - ADS-B działa OK, stayed_put to dobry filtr
+    # Jeśli niski (<50%) - OPDI gubi ferry flighty, stayed_put jest zbyt restrykcyjne
+    strict_gaps = all_c[all_c['at_strict_mro']]
+    if len(strict_gaps) > 0:
+        sp_rate = strict_gaps['stayed_put'].mean() * 100
+        print(f"\n  stayed_put% w STRICT MRO: {sp_rate:.1f}% (z {len(strict_gaps)} gapów)")
+        print(f"  → jeśli <50%: OPDI gubi ferry flighty po C-check'u, stayed_put jest zbyt strict dla MEDIUM")
+    
+    # Per-airport breakdown - top 15 lotnisk gdzie B737 mają gapy 14-60 dni
+    print(f"\n  TOP 15 lotnisk z gapami C-check (do weryfikacji listy MRO):")
+    top_ades = all_c['ades'].value_counts().head(15)
+    for ades, cnt in top_ades.items():
+        in_strict = '★STRICT' if ades in STRICT_MRO_HUBS else ('●MRO' if ades in MRO_HUBS else '·LOW')
+        facility = MRO_HUBS.get(ades, '')
+        print(f"    {ades}: {cnt:4d} {in_strict}  {facility}")
+    
     print("\n=== Dashboard ===")
     dashboard = build_dashboard(df)
     
     print(f"\nSamolotów w dashboardzie: {len(dashboard)}")
     print(f"\nRozkład priorytetów:")
     print(dashboard['priorytet'].value_counts())
-    print(f"\nRozkład confidence:")
+    print(f"\nRozkład confidence (per samolot, ostatni gap):")
     print(dashboard['confidence'].value_counts())
     print(f"\nReforecast (samoloty gdzie zgadliśmy że miał check którego nie złapaliśmy): "
           f"{dashboard['reforecasted'].sum()}")
@@ -219,3 +300,26 @@ if __name__ == "__main__":
     print(f"Łącznie: {len(lotams)}")
     print(lotams[['registration', 'icao_operator', 'ostatni_c_check', 
                   'prognoza_next', 'priorytet']].head(15).to_string())
+    
+    # === Zapis wyników do output/ (nadpisuje przy każdym uruchomieniu) ===
+    dashboard_path = OUTPUT_DIR / 'dashboard.csv'
+    lotams_path = OUTPUT_DIR / 'lotams_clients.csv'
+    top_now_path = OUTPUT_DIR / 'top_priority_now.csv'
+    
+    dashboard.to_csv(dashboard_path, index=False, encoding='utf-8')
+    lotams.to_csv(lotams_path, index=False, encoding='utf-8')
+    # Tabela alertowa dla handlowca: TERAZ + 6m + 12m, aktywne
+    top_now = dashboard[
+        (dashboard['priorytet'].isin(['TERAZ', 'TERAZ (zaległe)', '6 mies.', '12 mies.'])) &
+        (dashboard['is_active'])
+    ]
+    top_now.to_csv(top_now_path, index=False, encoding='utf-8')
+    
+    print(f"\n=== Zapisano wyniki ===")
+    print(f"  {log_path}            (cały output terminala)")
+    print(f"  {dashboard_path}      ({len(dashboard)} samolotów, pełna tabela)")
+    print(f"  {lotams_path}  ({len(lotams)} klientów LOTAMS)")
+    print(f"  {top_now_path}  ({len(top_now)} samolotów w oknie decyzyjnym)")
+    
+    sys.stdout = sys.__stdout__
+    log_file.close()

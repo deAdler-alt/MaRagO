@@ -106,3 +106,6 @@ dmypy.json
 
 # Folder z danymi (zgodnie z Twoim pierwszym pytaniem)
 data/
+
+# Wyniki pipeline (regenerowane przy każdym uruchomieniu)
+output/
