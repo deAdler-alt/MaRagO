@@ -1,0 +1,8 @@
+pandas>=2.0
+pyarrow>=14.0
+requests
+python-dateutil
+streamlit
+plotly
+scikit-learn
+lightgbm
