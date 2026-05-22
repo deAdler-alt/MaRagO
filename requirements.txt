@@ -4,3 +4,9 @@ pyyaml>=6.0
 streamlit>=1.28
 plotly>=5.18
 pytest>=7.4
+requests
+python-dateutil
+streamlit
+plotly
+scikit-learn
+lightgbm

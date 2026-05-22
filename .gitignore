@@ -4,3 +4,114 @@ __pycache__/
 .pytest_cache/
 data/eurocontrol/cache/
 *.parquet
+# Binarne i skompilowane pliki Pythona
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Rozszerzenia w C
+*.so
+
+# Pliki dystrybucji i paczek
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller (tworzenie plików .exe)
+*.manifest
+*.spec
+
+# Logi instalatora pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testy jednostkowe i raporty pokrycia kodu (coverage)
+htmlcov/
+.toml
+.cache
+.pytest_cache/
+.noscript_cache/
+.string_cache/
+.hypothesis/
+.run/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.mutmut-cache
+
+# Pliki tłumaczeń
+*.mo
+*.pot
+
+# Django (framework)
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask (framework)
+instance/
+.webassets-cache
+
+# Scrapy (web scraping)
+.scrapy
+
+# Dokumentacja Sphinx
+docs/_build/
+
+# Jupyter Notebook i IPython
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# Zarządzanie pakietami (Poetry/Pipenv/PDM)
+.pdm-plugins/
+.pdm-build/
+__pypackages__/
+
+# Środowiska wirtualne (BARDZO WAŻNE)
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Konfiguracja środowisk programistycznych (IDE)
+.idea/
+.vscode/
+.spyderproject
+.spyproject
+.ropeproject
+
+# MyPy i inne narzędzia do sprawdzania typów
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Folder z danymi (zgodnie z Twoim pierwszym pytaniem)
+data/
+
+# Wyniki pipeline (regenerowane przy każdym uruchomieniu)
+output/
