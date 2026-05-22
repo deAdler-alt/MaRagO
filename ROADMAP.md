@@ -49,11 +49,14 @@ OPDI Parquet (40 mies., 5M+ lotów B737 EU)
 
 ### W trakcie
 
-- [ ] Sanity check outputu dashboard v2
+- [x] Sanity check outputu dashboard v2 - ✅ HIGH+MED 11.5%, 38 klientów LOTAMS wykrytych
+- [x] Rozszerzona lista MRO (11 STRICT + 14 MEDIUM hubów)
+- [x] Smart picker (preferuje HIGH > MEDIUM > LOW per samolot)
+- [x] Output do CSV (dashboard, lotams_clients, top_priority_now) + Tee log
+- [ ] Feature engineering pod ML (features.py - gotowe, do uruchomienia)
 
 ### Do zrobienia
 
-- [ ] Feature engineering pod ML
 - [ ] LightGBM classifier (pseudo-labelling)
 - [ ] Per-aircraft historical interval
 - [ ] Streamlit dashboard (3 widoki)
