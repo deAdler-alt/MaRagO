@@ -51,6 +51,16 @@ def _pick_maintenance_gap(aircraft_gaps: pd.DataFrame) -> pd.Series | None:
     return known.loc[known["duration_days"].idxmax()]
 
 
+def _confidence_label(confidence_score: float, last_check_type: str) -> str:
+    if last_check_type == "C-check" and confidence_score >= 0.7:
+        return "HIGH"
+    if last_check_type == "C-check" and confidence_score >= 0.4:
+        return "MEDIUM"
+    if last_check_type in {"B-check", "D-check"} and confidence_score >= 0.5:
+        return "MEDIUM"
+    return "LOW"
+
+
 def predict_ccheck(
     flights: pd.DataFrame,
     gaps: pd.DataFrame,
@@ -111,6 +121,19 @@ def predict_ccheck(
             suggested_contact = contact_start
             if last_c is None and last_check_type in {"A-check", "B-check"}:
                 confidence = min(confidence, 0.45)
+
+            # Reforecast (logika z Maćka): jeśli samolot jest aktywny
+            # ale predykcja jest > 3 mies. w przeszłości, miał C-check którego nie złapaliśmy
+            months_since_predicted = (reference - next_ccheck).days / 30.44
+            last_flight = aircraft_flights["dep_time_utc"].max()
+            is_active = (reference - last_flight).days <= 180
+            if is_active and months_since_predicted > 3:
+                next_ccheck = last_flight + pd.DateOffset(months=12)
+                contact_start = next_ccheck - pd.DateOffset(months=ccheck_cfg["contact_window_start_months"])
+                contact_end = next_ccheck - pd.DateOffset(months=ccheck_cfg["contact_window_end_months"])
+                forecast_quarter = _to_quarter(next_ccheck)
+                suggested_contact = contact_start
+                confidence = min(confidence, 0.4)
         else:
             next_ccheck = None
             contact_start = None
@@ -135,6 +158,7 @@ def predict_ccheck(
                 "contact_window_end": contact_end,
                 "suggested_contact_date": suggested_contact,
                 "confidence": confidence,
+                "confidence_label": _confidence_label(confidence, last_check_type),
             }
         )
 

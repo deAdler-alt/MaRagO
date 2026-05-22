@@ -62,6 +62,16 @@ def is_near_mro(airport: str | None, config: dict | None = None) -> bool:
     return text.upper() in {hub.upper() for hub in config["mro_hubs"]}
 
 
+def is_strict_mro(airport: str | None, config: dict | None = None) -> bool:
+    if airport is None or (isinstance(airport, float) and pd.isna(airport)):
+        return False
+    text = str(airport).strip()
+    if not text or text.lower() == "nan":
+        return False
+    config = config or load_config()
+    return text.upper() in {hub.upper() for hub in config.get("strict_mro_hubs", [])}
+
+
 def classify_gaps(gaps_df, config: dict | None = None):
     import pandas as pd
 
@@ -81,4 +91,17 @@ def classify_gaps(gaps_df, config: dict | None = None):
     )
     classified["check_type"] = results.apply(lambda item: item[0])
     classified["confidence"] = results.apply(lambda item: item[1])
+
+    # Boost confidence dla C-checków przy strict MRO hubach (Warszawa, Sofia, Ostrava…)
+    strict_boost_mask = (
+        (classified["check_type"] == "C-check")
+        & (
+            classified["last_airport"].apply(lambda a: is_strict_mro(a, config))
+            | classified["next_airport"].apply(lambda a: is_strict_mro(a, config))
+        )
+    )
+    classified.loc[strict_boost_mask, "confidence"] = (
+        classified.loc[strict_boost_mask, "confidence"].clip(upper=1.0) + 0.15
+    ).clip(upper=1.0)
+
     return classified

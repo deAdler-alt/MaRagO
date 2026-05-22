@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -36,7 +36,7 @@ def _sales_note(row: pd.Series) -> str:
 def _weekly_digest(alerts: pd.DataFrame) -> str:
     lines = [
         "# MRO Weekly Digest — LOTAMS",
-        f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
+        f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         "",
         f"Samoloty w oknie decyzyjnym: **{len(alerts)}**",
         "",

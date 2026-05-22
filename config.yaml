@@ -61,15 +61,38 @@ checks:
   min_gap_hours: 48
 
 mro_hubs:
+  # LOTAMS & CEE (strict - prawie pewny C-check, nie hub operacyjny)
+  - EPWA   # Warszawa - LOTAMS
+  - LBSF   # Sofia - Lufthansa Technik Sofia
+  - LKMT   # Ostrava - Job Air Technic
+  - LROP   # Bukareszt - Romaero
+  - LZIB   # Bratysława
+  - LIRA   # Rzym Ciampino - ATITECH
+  - LPPT   # Lizbona - TAP M&E
+  # Duże MRO (mogą być hub operacyjny - confidence MEDIUM)
+  - EDDH   # Hamburg - Lufthansa Technik
+  - EDDM   # München - Lufthansa Technik
+  - EHAM   # Amsterdam - KLM E&M
+  - EIDW   # Dublin - SR Technics
+  - LTBA   # Istanbul ATA - Turkish Technic
+  - LTFM   # Istanbul IST - Turkish Technic
+  - LFLL   # Lyon - AFI KLM E&M
+  - LSGG   # Genewa - SR Technics
+  - LGAV   # Ateny - Olympic Engineering
+  - LEMD   # Madryt - Iberia Maintenance
+  - EETN   # Tallinn
+  - LOWW   # Wiedeń
+  - EBBR   # Bruksela
+  - EPBY   # Bydgoszcz
+
+strict_mro_hubs:
   - EPWA
-  - EDDH
-  - LTFM
-  - LEMD
-  - EIDW
-  - EETN
-  - LOWW
-  - EBBR
-  - EPBY
+  - LBSF
+  - LKMT
+  - LROP
+  - LZIB
+  - LIRA
+  - LPPT
 
 ccheck:
   base_interval_months: 27

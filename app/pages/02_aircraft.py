@@ -108,8 +108,12 @@ def render() -> None:
 
     with col_info:
         st.subheader("Prognoza")
-        st.metric("Operator", pred.get("operator", "—"))
-        st.metric("Wiek", f"{pred.get('age_years', '—')} lat")
+        import math
+        op = pred.get("operator") or "—"
+        age = pred.get("age_years")
+        age_str = f"{age:.0f} lat" if age is not None and not (isinstance(age, float) and math.isnan(age)) else "—"
+        st.metric("Operator", op)
+        st.metric("Wiek", age_str)
         st.metric("Ostatni check", pred.get("last_check_type", "—"))
         st.metric("Prognoza C-check", pred.get("forecast_quarter", "—"))
         st.metric("Priorytet", pred.get("priority_label", "—"))
