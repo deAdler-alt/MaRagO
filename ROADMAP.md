@@ -55,10 +55,10 @@ OPDI Parquet (40 mies., 5M+ lotów B737 EU)
 - [x] Output do CSV (dashboard, lotams_clients, top_priority_now) + Tee log
 - [x] Feature engineering pod ML (features.py - 48 kolumn, 16 nowych features)
 - [x] Geograficzny filtr Europy (32 prefiksy ICAO, bez Izraela/Rosji/Bliskiego Wsch., z Afryką Płn. i Turcją)
+- [x] LightGBM classifier (train_classifier.py) - AUC 0.983, Precision@100=1.0 na holdout
+- [x] HANDOFF.md dla przekazania partnerowi
 
 ### Do zrobienia
-
-- [ ] LightGBM classifier (pseudo-labelling)
 - [ ] Per-aircraft historical interval
 - [ ] Streamlit dashboard (3 widoki)
 - [ ] Pitch deck + demo script
