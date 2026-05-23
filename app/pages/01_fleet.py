@@ -20,7 +20,6 @@ from app.data_loader import (
     priority_sort_key,
 )
 from app.style import (
-    GLOBAL_CSS,
     kpi_card,
     section_header,
     page_header,
@@ -28,8 +27,6 @@ from app.style import (
     PRIORITY_COLORS,
 )
 
-st.set_page_config(page_title="Fleet Priority | MRO Intelligence", layout="wide")
-st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
 # ── Dane ─────────────────────────────────────────────────────────────────────
 df = enrich_with_generation(load_dashboard())

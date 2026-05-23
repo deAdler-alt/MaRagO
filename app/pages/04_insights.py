@@ -13,10 +13,8 @@ import plotly.express as px
 import streamlit as st
 
 from app.data_loader import load_dashboard, load_candidates
-from app.style import GLOBAL_CSS, kpi_card, section_header, page_header, action_box
+from app.style import kpi_card, section_header, page_header, action_box
 
-st.set_page_config(page_title="ML Insights | MRO Intelligence", layout="wide")
-st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
 # ── Dane ─────────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=600)

@@ -20,15 +20,12 @@ from app.data_loader import (
     priority_sort_key,
 )
 from app.style import (
-    GLOBAL_CSS,
     kpi_card,
     section_header,
     page_header,
     action_box,
 )
 
-st.set_page_config(page_title="Commercial Alerts | MRO Intelligence", layout="wide")
-st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
 # ── Dane ─────────────────────────────────────────────────────────────────────
 dashboard = load_dashboard()

@@ -19,7 +19,6 @@ from app.data_loader import (
     months_label,
 )
 from app.style import (
-    GLOBAL_CSS,
     kpi_card,
     section_header,
     page_header,
@@ -27,8 +26,6 @@ from app.style import (
     PRIORITY_COLORS,
 )
 
-st.set_page_config(page_title="Aircraft Detail | MRO Intelligence", layout="wide")
-st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
 # ── Dane ─────────────────────────────────────────────────────────────────────
 dashboard = load_dashboard()
