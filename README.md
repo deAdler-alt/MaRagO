@@ -99,7 +99,11 @@ Klasyfikacja ADS-B to sygnał pośredni, nie dokumentacja MRO.
 
 ## Autorzy
 
+
 **Maciek Gilecki - backend, ETL**
+
 * Kontakt: maciekgilecki@gmail.com
+
 **Kamil Piejko - ML, Tuning**
+
 * Kontakt: kamil.pl553@gmail.com
