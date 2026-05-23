@@ -59,9 +59,9 @@ OPDI Parquet (40 mies., 5M+ lotów B737 EU)
 - [x] HANDOFF.md dla przekazania partnerowi
 
 ### Do zrobienia
-- [ ] Per-aircraft historical interval
-- [ ] Streamlit dashboard (3 widoki)
-- [ ] Pitch deck + demo script
+- [x] Per-aircraft historical interval (`predict.py`) ✅
+- [x] Streamlit dashboard (3 widoki: Fleet Priority, Aircraft Detail, Commercial Alerts) ✅
+- [ ] Pitch deck + demo script (krok 11)
 
 ## Roadmapa szczegółowa
 
@@ -213,7 +213,7 @@ Slidy (8–10):
 8. **Roadmap produkcyjny** – live mode (OpenSky API), API dla CRM, expand na A320/A330
 9. **Team & Q&A**
 
-**Demo script** (3 min):
+**Demo script** (4 min):
 1. Otwórz priority list – pokaż liczbę samolotów TERAZ
 2. Pokaż konkretny SP-* (LOT) wpadający w okno – timeline
 3. Filtr "tylko HIGH confidence + 6 mies." – pokaż listę dla handlowca

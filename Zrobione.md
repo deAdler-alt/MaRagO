@@ -8,19 +8,19 @@ Wszystko co musisz wiedzieć żeby przejąć projekt. Czytaj od góry, sekcje "C
 
 ## Stan na teraz (TL;DR)
 
-✅ **Zrobione (kroki 1–8 z roadmapy):**
+✅ **Zrobione (kroki 1–10 z roadmapy):**
 - Pipeline ETL + detekcja gapów + klasyfikacja regułowa
 - Dashboard v2 z confidence levels (HIGH/MEDIUM/LOW)
 - Geograficzny filtr Europy (32 prefiksy ICAO, bez Izraela/Rosji/Bliskiego Wsch.)
 - Feature engineering (48 kolumn, 16 nowych features pod ML)
-- **LightGBM classifier — AUC 0.983 na holdout** ✨
+- **LightGBM classifier — AUC 0.975 na holdout** (fix leakage reguły 3) ✨
+- **Per-aircraft historical interval** (`predict.py`) — avg 507 dni zamiast głupiego +24 mies.
+- **Streamlit dashboard** (`app/`) — 3 widoki z CSS, kolorową tabelą, timeline, alertami sprzedażowymi
 
-⏳ **Co dalej (kroki 9–11):**
-- Per-aircraft historical interval (zastąpienie głupiego `+24 mies.`)
-- **Streamlit dashboard** (3 widoki — to gdzie wkład jest największy)
+⏳ **Co dalej (krok 11):**
 - Pitch deck + demo script
 
-**Budżet czasu pozostały:** ~10h (Streamlit 5-6h + pitch 2h + bufor)
+**Budżet czasu pozostały:** ~2h (pitch + demo script)
 
 ---
 
@@ -34,11 +34,14 @@ Po przefiltrowaniu do geograficznej Europy + treningu ML:
 | Unikalnych samolotów | 2,761 |
 | Kandydatów C-check (gap 14–60d, ades w EU) | 3,651 |
 | Pseudo-labele: pozytywne (HIGH+MEDIUM) | 974 |
-| Pseudo-labele: negatywne (LOW + reguły) | 563 |
-| Pseudo-labele: unlabeled (do predykcji) | 2,114 |
-| **Test AUC (holdout 2025-07 → 2026-04)** | **0.983** |
+| Pseudo-labele: negatywne (LOW + reguły 1-3) | 674 (+111 z reguły 3) |
+| Pseudo-labele: unlabeled (do predykcji) | 2,003 |
+| **Test AUC (holdout 2025-07 → 2026-04)** | **0.975** (realniejszy po fix leakage) |
 | **Precision@100 na holdout** | **1.000** (100/100) |
-| **Precision@200 na holdout** | **0.990** (198/200) |
+| **Precision@200 na holdout** | **0.950** (190/200) |
+| Per-aircraft interwał (avg) | 507 dni (16.6 mies.) |
+| Samolotów z per-aircraft historią | 456 |
+| Operatorów z interwałem | 65 |
 | Samolotów w dashboardzie | 1,684 |
 | Klienci LOTAMS w EPWA (historycznie) | 37 |
 
@@ -85,8 +88,11 @@ data/*.parquet (OPDI, 40 plików, 2023-01 → 2026-04, ~1.6 GB)
 | `pipeline.py` | Core ETL: load → detect_gaps → classify_check → build_dashboard | ✅ |
 | `features.py` | Feature engineering — 16 nowych kolumn pod ML | ✅ |
 | `train_classifier.py` | LightGBM binary classifier + predykcja prob | ✅ |
-| `predict.py` | Per-aircraft historical interval | ⏳ TODO (krok 9) |
-| `app.py` | Streamlit dashboard | ⏳ TODO (krok 10) |
+| `predict.py` | Per-aircraft historical interval → predictions_with_interval.csv | ✅ |
+| `app/main.py` | Streamlit home — KPI karty + problem statement | ✅ |
+| `app/pages/01_fleet.py` | Fleet Priority — kolorowa tabela z filtrami | ✅ |
+| `app/pages/02_aircraft.py` | Aircraft Detail — timeline C-checków + historia | ✅ |
+| `app/pages/03_alerts.py` | Commercial Alerts — per-operator + szablony e-mail | ✅ |
 | `pitch/deck.pptx` | Slajdy | ⏳ TODO (krok 11) |
 | `requirements.txt` | pandas, pyarrow, requests, streamlit, plotly, sklearn, lightgbm | ✅ |
 | `ROADMAP.md` | Pełny plan kroków 1–11 ze szczegółami | ✅ (źródło prawdy) |
@@ -237,14 +243,14 @@ To gdzie produkt naprawdę się pokazuje. 3 widoki w sidebar nav:
 
 **Źródło danych:** `output/predictions.csv` (3651 wpisów) + `output/dashboard.csv` (1684 samolotów).
 
-**Bonus jeśli czas:**
+**Dodatki które dają punkt u Jury:**
 - Mapa MRO hubów (Plotly mapbox)
 - Heatmap "kiedy zaczynają się C-checki" (miesiące × operator)
 - SHAP plot top features
 
 ### Krok 11 — Pitch deck + demo (`pitch/`, ~2h)
 
-Slajdy (8–10), demo script 3 min. Szczegóły w `ROADMAP.md` sekcja "Krok 11".
+Slajdy (8–10), demo script 4 min. Szczegóły w `ROADMAP.md` sekcja "Krok 11".
 
 **Kluczowe liczby dla pitchu (już mamy):**
 - 2,761 samolotów B737 w EU

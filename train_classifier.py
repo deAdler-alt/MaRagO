@@ -74,21 +74,28 @@ CATEGORICAL_COLS = ['ades_country', 'typecode', 'registration_country']
 # ============================================================
 
 def assign_pseudo_labels(features):
-    """Pseudo-labele na bazie reguł confidence + heurystyk negatywnych."""
+    """Pseudo-labele na bazie reguł confidence + heurystyk negatywnych.
+
+    ZNANE OGRANICZENIE: gap_days i flights_per_day_pre_gap pojawiają się zarówno
+    w regułach negatywnych jak i w FEATURE_COLS. Model częściowo odtwarza te reguły
+    zamiast uczyć się prawdziwych wzorców. Reguła 3 celowo dodaje negatywy w środkowym
+    zakresie gap_days [20-40d], żeby model nie domyślnie klasyfikował całej tej strefy
+    jako C-check tylko dlatego, że nigdy nie widział tam negatywu w treningu.
+    """
     df = features.copy()
     label = pd.Series(index=df.index, dtype=object)
-    
+
     # POSITIVES: HIGH lub MEDIUM (oba znaczą "to prawdopodobnie C-check")
     label[df['confidence'].isin(['HIGH', 'MEDIUM'])] = 1
-    
+
     # NEGATIVES: tylko z LOW + dodatkowe twarde kryteria
     is_low = df['confidence'] == 'LOW'
     not_at_mro = ~df['at_any_mro_hub']
-    
+
     # Reguła 1: krótki gap (14-18d) w nieznanym miejscu = AOG, nie pełen C-check
     rule1 = is_low & not_at_mro & (df['gap_days'] < 18)
     label[rule1] = 0
-    
+
     # Reguła 2: długi gap (>50d) + niska aktywność pre-gap + poza MRO = storage/lease
     rule2 = (
         is_low & not_at_mro &
@@ -96,7 +103,20 @@ def assign_pseudo_labels(features):
         (df['flights_per_day_pre_gap'] < 0.5)
     )
     label[rule2] = 0
-    
+
+    # Reguła 3: środkowy gap [20-40d] + bardzo wysoka aktywność + wiele lotnisk = AOG operacyjny
+    # Planowany C-check poprzedzony jest normalną/malejącą aktywnością. Samolot latający
+    # intensywnie (>4 loty/dzień, >10 różnych lotnisk) i nagle stojący 20-40 dni to
+    # sygnał awarii AOG, nie zaplanowanego przeglądu. Bez tej reguły model nigdy nie widzi
+    # negatywu w zakresie [18-50d] i domyślnie przypisuje wszystkiemu tam probability≈1.
+    rule3 = (
+        is_low & not_at_mro &
+        df['gap_days'].between(20, 40) &
+        (df['flights_per_day_pre_gap'] > 4.0) &
+        (df['distinct_airports_pre_gap'] > 10)
+    )
+    label[rule3] = 0
+
     df['label'] = label
     return df
 
@@ -164,9 +184,12 @@ def train_lgbm(X_train, y_train, X_val, y_val):
     pos = (y_train == 1).sum()
     neg = (y_train == 0).sum()
     pos_weight = max(1.0, neg / max(1, pos))
-    
-    train_set = lgb.Dataset(X_train, label=y_train, categorical_feature=CATEGORICAL_COLS)
-    val_set = lgb.Dataset(X_val, label=y_val, categorical_feature=CATEGORICAL_COLS,
+
+    # Tylko te kolumny kategoryczne, które faktycznie są w danych
+    cat_in_data = [c for c in CATEGORICAL_COLS if c in X_train.columns]
+
+    train_set = lgb.Dataset(X_train, label=y_train, categorical_feature=cat_in_data)
+    val_set = lgb.Dataset(X_val, label=y_val, categorical_feature=cat_in_data,
                           reference=train_set)
     
     params = {
@@ -383,7 +406,28 @@ if __name__ == "__main__":
     ).round(3)
     print(stats_by_conf.to_string())
     
-    # 9. Top LOW kandydaci z najwyższą probabilistyką - ciekawi handlowca!
+    # 9. Sanity check: czy model nadal domyślnie przypisuje wysoką prob całemu [18-50d]?
+    # Jeśli WSZYSTKIE LOW w tym zakresie mają prob>0.8, nadal mamy leakage-effect.
+    # Po dodaniu reguły 3 powinniśmy zobaczyć zróżnicowanie wewnątrz LOW.
+    print(f"\n=== Sanity check: rozkład prob LOW kandydatów wg zakresu gap_days ===")
+    low_all = features[features['confidence'] == 'LOW'].copy()
+    bins = [0, 18, 30, 40, 50, 61]
+    labels_bin = ['14-18d', '18-30d', '30-40d', '40-50d', '50-60d']
+    low_all['gap_bin'] = pd.cut(low_all['gap_days'], bins=bins, labels=labels_bin, right=False)
+    gap_bin_stats = low_all.groupby('gap_bin', observed=True)['c_check_probability'].agg(
+        ['count', 'mean', 'std', 'min', 'max']
+    ).round(3)
+    print(gap_bin_stats.to_string())
+    mean_mid = low_all[low_all['gap_days'].between(18, 50)]['c_check_probability'].mean()
+    print(f"\n  Średnia prob LOW w środkowym zakresie [18-50d]: {mean_mid:.3f}")
+    if mean_mid > 0.85:
+        print("  ⚠️  Model nadal prawie zawsze daje HIGH prob dla [18-50d]. "
+              "Reguła 3 mogła nie złapać wystarczająco dużo przypadków - "
+              "sprawdź feature_importance czy gap_days dominuje.")
+    else:
+        print("  ✓ Model różnicuje wewnątrz LOW [18-50d] - leakage effect osłabiony.")
+
+    # 10. Top LOW kandydaci z najwyższą probabilistyką - ciekawi handlowca!
     # To są przypadki które reguły uznały za niejasne, ale ML uważa że TO są C-checki
     print(f"\n=== Top 20 LOW kandydatów z najwyższą c_check_probability ===")
     print("(reguły dały LOW, ale ML mówi 'to jednak prawdopodobnie C-check')")
@@ -394,8 +438,8 @@ if __name__ == "__main__":
                     'c_check_probability']
     display_cols = [c for c in display_cols if c in top_low.columns]
     print(top_low[display_cols].round(3).to_string(index=False))
-    
-    # 10. Save
+
+    # 11. Save
     pred_path = OUTPUT_DIR / 'predictions.csv'
     save_cols = ['icao24', 'registration', 'icao_operator', 'typecode',
                  'ades', 'mro_facility', 'last_seen', 'next_first_seen', 'gap_days',
