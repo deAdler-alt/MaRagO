@@ -1,4 +1,4 @@
-# MRO Intelligence Platform — LOTAMS
+# MoRagO - VibeTheFuture{🥈}
 
 Platforma BI do wykrywania okien C-check samolotów Boeing 737 w Europie na podstawie danych telemetrycznych ADS-B (EUROCONTROL OPDI). Służy handlowcom LOTAMS do identyfikacji potencjalnych klientów przed ich decyzją o wyborze zakładu MRO.
 
@@ -96,3 +96,10 @@ scripts/                    # Helper: run_pipeline.py / run_pipeline.sh
 
 Dane: EUROCONTROL OPDI · 7M+ lotów B737 EU · styczeń 2023 → kwiecień 2026.  
 Klasyfikacja ADS-B to sygnał pośredni, nie dokumentacja MRO.
+
+## Autorzy
+
+**Maciek Gilecki - backend, ETL**
+* Kontakt: maciekgilecki@gmail.com
+**Kamil Piejko - ML, Tuning**
+* Kontakt: kamil.pl553@gmail.com
