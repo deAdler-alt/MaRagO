@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from app.data_loader import (
@@ -174,7 +175,6 @@ with col_chart:
         "Nieaktywny": "#334155",
     }
 
-    import plotly.graph_objects as go
     fig_mini = go.Figure(go.Pie(
         labels=visible_counts["Priorytet"],
         values=visible_counts["N"],

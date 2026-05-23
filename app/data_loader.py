@@ -107,7 +107,6 @@ def load_dashboard() -> pd.DataFrame:
             pred.groupby("icao24")["c_check_probability"]
             .max()
             .reset_index()
-            .rename(columns={"c_check_probability": "c_check_probability"})
         )
         df = df.merge(best_prob, on="icao24", how="left")
 

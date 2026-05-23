@@ -54,13 +54,15 @@ FEATURE_COLS = [
     'gap_days', 'gap_start_month', 'gap_start_dow', 'ades_country',
     # Aircraft
     'typecode', 'registration_country', 'destination_country_matches_registration',
+    'aircraft_age_years',
     # Pre-gap (aktywność 60 dni przed gapem)
     'flights_per_day_pre_gap', 'distinct_airports_pre_gap',
-    'avg_flight_duration_pre_gap_hours',
+    'avg_flight_duration_pre_gap_hours', 'flights_per_day_trend',
     # Post-gap (zachowanie 30 dni po gapie)
     'same_operator_after', 'same_country_after',
+    'days_to_first_flight_after',
     # Operator-level
-    'operator_fleet_size', 'gap_at_operator_typical_mro',
+    'operator_fleet_size', 'gap_at_operator_typical_mro', 'at_operator_main_base',
     # Historical (poprzednie C-checki tego samolotu)
     'num_previous_c_checks', 'interval_to_previous_days',
     'mean_interval_prev_c_checks',

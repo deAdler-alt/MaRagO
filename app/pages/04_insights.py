@@ -78,7 +78,6 @@ AIRPORT_META = {
     "LYBE": (44.818, 20.309, "Belgrade",        "RS"),
     "HEAZ": (30.080, 31.380, "Cairo Almaza",    "EG"),
     "GMMN": (33.368, -7.590, "Casablanca",      "MA"),
-    "LKPR": (50.101, 14.260, "Praha",           "CZ"),
 }
 
 COUNTRY_COLORS = {
@@ -358,6 +357,10 @@ with col_fi:
             "mean_interval_prev_c_checks":           "Śr. interwał historyczny",
             "same_operator_after":                   "Ten sam operator po przerwie",
             "typecode":                              "Typ samolotu (B737 variant)",
+            "aircraft_age_years":                    "Wiek samolotu / wariantu (lata)",
+            "flights_per_day_trend":                 "Trend aktywności (14d/60d przed przerwą)",
+            "days_to_first_flight_after":            "Dni do kolejnego lotu po powrocie",
+            "at_operator_main_base":                 "Przerwa w bazie własnej operatora",
         }
         fi_plot["label"] = fi_plot["feature"].map(FEAT_LABELS).fillna(fi_plot["feature"])
         fi_plot["gain_pct"] = fi_plot["importance_gain"] / fi_plot["importance_gain"].sum() * 100

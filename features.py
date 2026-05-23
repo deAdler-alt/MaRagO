@@ -122,6 +122,40 @@ def add_aircraft_features(candidates):
     return out
 
 
+# Rok wprowadzenia wariantu B737 do służby (mediana okresu produkcji)
+_TYPECODE_TO_INTRO_YEAR = {
+    "B37M": 2019, "B38M": 2018, "B39M": 2018, "B3XM": 2023,
+    "B736": 2004, "B737": 2007, "B738": 2010, "B739": 2012,
+    "B73H": 2010, "B73M": 2007, "B73C": 2010, "B73W": 2010,
+    "B733": 1992, "B734": 1993, "B735": 1994,
+}
+
+
+def add_aircraft_age(candidates, df):
+    """Wiek samolotu (lata) na chwilę gapa.
+
+    Preferencja: kolumna 'built' (rok produkcji per egzemplarz) → jeśli brak,
+    proxy z typecode (rok wprowadzenia wariantu do eksploatacji).
+    """
+    print("  Liczę aircraft_age_years...")
+    out = candidates.copy()
+
+    if 'built' in out.columns:
+        built_years = pd.to_numeric(out['built'], errors='coerce')
+    elif 'built' in df.columns:
+        built_map = df.groupby('icao24')['built'].first()
+        built_years = pd.to_numeric(out['icao24'].map(built_map), errors='coerce')
+    elif 'typecode' in out.columns:
+        built_years = out['typecode'].str.upper().map(_TYPECODE_TO_INTRO_YEAR)
+    else:
+        out['aircraft_age_years'] = np.nan
+        return out
+
+    gap_years = out['last_seen'].dt.year
+    out['aircraft_age_years'] = (gap_years - built_years).clip(lower=0)
+    return out
+
+
 def _build_aircraft_dict(df):
     """Zbuduj raz słownik {icao24: DataFrame z lotami}. Wielokrotnie wykorzystywany."""
     return {ac: g for ac, g in df.groupby('icao24', sort=False)}
@@ -161,6 +195,42 @@ def add_pre_gap_features(candidates, aircraft_dict, window_days=60):
     out['flights_per_day_pre_gap'] = fpd
     out['distinct_airports_pre_gap'] = dist
     out['avg_flight_duration_pre_gap_hours'] = dur
+    return out
+
+
+def add_pre_gap_trend(candidates, aircraft_dict, window_long=60, window_short=14):
+    """Trend aktywności przed gapem: fpd(14d) / fpd(60d).
+
+    Wartość < 1 → samolot zwalniał (sygnał planowanego C-check).
+    Wartość > 1 → samolot przyspieszał (typowe dla AOG: intensywna praca → awaria).
+    Wartość ≈ 1 → stabilna aktywność (storage zimowy).
+    """
+    print(f"  Liczę flights_per_day_trend ({window_short}d / {window_long}d)...")
+    n = len(candidates)
+    trend = np.full(n, np.nan)
+
+    candidates_reset = candidates.reset_index(drop=True)
+
+    for i, row in candidates_reset.iterrows():
+        ac_df = aircraft_dict.get(row['icao24'])
+        if ac_df is None or len(ac_df) == 0:
+            continue
+        gap_start  = row['last_seen']
+        ac_last    = ac_df['last_seen'].values
+        gap_np     = np.datetime64(gap_start)
+        short_start = np.datetime64(gap_start - pd.Timedelta(days=window_short))
+        long_start  = np.datetime64(gap_start - pd.Timedelta(days=window_long))
+
+        fpd_short = int(((ac_last >= short_start) & (ac_last <= gap_np)).sum()) / window_short
+        fpd_long  = int(((ac_last >= long_start)  & (ac_last <= gap_np)).sum()) / window_long
+
+        if fpd_long > 0:
+            trend[i] = fpd_short / fpd_long
+        elif fpd_short == 0:
+            trend[i] = 1.0  # Oba zero → brak aktywności w całym oknie (neutralne)
+
+    out = candidates_reset.copy()
+    out['flights_per_day_trend'] = trend
     return out
 
 
@@ -206,24 +276,78 @@ def add_post_gap_features(candidates, aircraft_dict, window_days=30):
     return out
 
 
+def add_post_gap_timing(candidates, aircraft_dict, window_days=30):
+    """Dni od końca gapa do kolejnego lotu — proxy szybkości wejścia w serwis.
+
+    Małe wartości (< 2 dni): samolot od razu wszedł w regularny rozkład
+    (lot techniczny → lot rejsowy tego samego dnia; typowe dla C-check powrotu).
+    Duże wartości: długi postój po pierwszym przelocie (storage, AOG przy wznowieniu).
+    """
+    print("  Liczę days_to_first_flight_after...")
+    n = len(candidates)
+    days_after = np.full(n, np.nan)
+
+    candidates_reset = candidates.reset_index(drop=True)
+
+    for i, row in candidates_reset.iterrows():
+        gap_end = row.get('next_first_seen')
+        if pd.isna(gap_end):
+            continue
+        ac_df = aircraft_dict.get(row['icao24'])
+        if ac_df is None or len(ac_df) == 0:
+            continue
+
+        gap_end_ts = pd.Timestamp(gap_end)
+        window_end = gap_end_ts + pd.Timedelta(days=window_days)
+
+        ac_first = ac_df['first_seen'].values
+        mask = (ac_first > np.datetime64(gap_end_ts)) & (ac_first <= np.datetime64(window_end))
+        post_flights = ac_df.loc[mask].sort_values('first_seen')
+
+        if not post_flights.empty:
+            # Czas od powrotu (next_first_seen) do NASTĘPNEGO lotu tego samolotu
+            next_dep = pd.Timestamp(post_flights.iloc[0]['first_seen'])
+            days_after[i] = (next_dep - gap_end_ts).total_seconds() / 86400
+        else:
+            days_after[i] = float(window_days)  # Cenzorowane: brak kolejnego lotu w oknie
+
+    out = candidates_reset.copy()
+    out['days_to_first_flight_after'] = days_after
+    return out
+
+
 def add_operator_features(candidates, df):
-    """Cechy operatora: fleet size, typowy MRO, czy gap w typowym MRO."""
+    """Cechy operatora: fleet size, typowy MRO, baza główna, czy gap w typowym MRO."""
     print("  Liczę operator features...")
     out = candidates.copy()
-    
-    # Fleet size: ilu samolotów operator obsługuje w naszych danych
-    fleet = df.groupby('icao_operator')['icao24'].nunique()
-    out['operator_fleet_size'] = out['icao_operator'].map(fleet)
-    
-    # Typowy MRO operatora = mode(ades) wśród WSZYSTKICH jego C-check kandydatów
-    # (włącznie z LOW - bo ML i tak nie wie który był prawdziwym C-check'iem)
+
     def _mode_safe(s):
         m = s.mode()
         return m.iloc[0] if not m.empty else None
+
+    # Fleet size: ilu samolotów operator obsługuje w naszych danych
+    fleet = df.groupby('icao_operator')['icao24'].nunique()
+    out['operator_fleet_size'] = out['icao_operator'].map(fleet)
+
+    # Typowy MRO operatora = mode(ades) wśród WSZYSTKICH jego C-check kandydatów
     op_typical = candidates.groupby('icao_operator')['ades'].agg(_mode_safe)
     out['operator_typical_mro'] = out['icao_operator'].map(op_typical)
     out['gap_at_operator_typical_mro'] = (out['ades'] == out['operator_typical_mro'])
-    
+
+    # Główna baza operatora = mode(adep) ze WSZYSTKICH jego lotów w df
+    # Gap w bazie własnej → mniej prawdopodobny C-check (MRO zwykle poza bazą)
+    if 'adep' in df.columns:
+        op_base = (
+            df[df['icao_operator'].notna()]
+            .groupby('icao_operator')['adep']
+            .agg(_mode_safe)
+        )
+        out['at_operator_main_base'] = (
+            out['ades'] == out['icao_operator'].map(op_base)
+        ).astype(float)
+    else:
+        out['at_operator_main_base'] = np.nan
+
     return out
 
 
@@ -287,18 +411,21 @@ def build_features(df, candidates):
     """Pełen pipeline feature engineering. Zwraca enriched candidates DataFrame."""
     print(f"\n=== Feature engineering ===")
     print(f"Kandydatów na C-check: {len(candidates):,}")
-    
+
     aircraft_dict = _build_aircraft_dict(df)
     print(f"Słownik samolotów: {len(aircraft_dict):,} icao24")
-    
+
     c = candidates.copy()
     c = add_gap_features(c)
     c = add_aircraft_features(c)
+    c = add_aircraft_age(c, df)
     c = add_pre_gap_features(c, aircraft_dict, window_days=60)
+    c = add_pre_gap_trend(c, aircraft_dict)
     c = add_post_gap_features(c, aircraft_dict, window_days=30)
+    c = add_post_gap_timing(c, aircraft_dict)
     c = add_operator_features(c, df)
     c = add_historical_features(c)
-    
+
     return c
 
 
@@ -327,10 +454,13 @@ if __name__ == "__main__":
     new_cols = [
         'gap_start_month', 'gap_start_dow', 'ades_country',
         'registration_country', 'destination_country_matches_registration',
+        'aircraft_age_years',
         'flights_per_day_pre_gap', 'distinct_airports_pre_gap',
-        'avg_flight_duration_pre_gap_hours',
+        'avg_flight_duration_pre_gap_hours', 'flights_per_day_trend',
         'same_operator_after', 'same_country_after',
-        'operator_fleet_size', 'operator_typical_mro', 'gap_at_operator_typical_mro',
+        'days_to_first_flight_after',
+        'operator_fleet_size', 'operator_typical_mro',
+        'gap_at_operator_typical_mro', 'at_operator_main_base',
         'num_previous_c_checks', 'interval_to_previous_days',
         'mean_interval_prev_c_checks',
     ]
